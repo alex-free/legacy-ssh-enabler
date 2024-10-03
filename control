@@ -1,0 +1,6 @@
+Package: legacy-ssh-enabler
+Version: 1.0
+Maintainer: Alex Free
+Architecture: all
+Homepage: https://github.com/alex-free/legacy-ssh-enabler
+Description: Allow your newer OpenSSH client and server to talk with older SSH clients and servers, system-wide.

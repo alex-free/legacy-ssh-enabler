@@ -1,0 +1,76 @@
+#!/bin/bash
+
+version=1.0
+ssh_config=/etc/ssh/ssh_config.d/legacy_ssh_enabler_ssh.conf
+sshd_config=/etc/ssh/sshd_config.d/legacy_ssh_enabler_sshd.conf
+
+# This means maybe unless it is true.
+confirmed_ssh_server=false
+
+restart_ssh() {
+    if command -v systemctl > /dev/null; then
+        # Systemd systems can be 'ssh' or 'sshd' so we find out which below.
+        ssh_service=$(systemctl list-units --type=service | grep ssh | awk '{print $1}')
+
+        if ! [ -z "$ssh_service" ]; then
+            systemctl restart $ssh_service
+            echo "Your OpenSSH server has been detected and restarted with configuration changes applied."
+            confirmed_ssh_server=true
+        fi
+    else
+        echo "Info: Legacy SSH Enabler changes were made, however OpenSSH server detection is unavailable for your system. If you have an OpenSSH server running, please restart it manually (i.e. with a reboot) to apply changes."
+        exit 1
+    fi
+}
+
+echo -e "Legacy SSH Enabler v$version\n(c) 2024, Alex Free (3-BSD)\n"
+
+if [ "$EUID" -ne 0 ]; then
+    echo "Error: Legacy SSH Enabler requires root privileges to expand your OpenSSH configuration."
+    exit 1
+fi
+
+if [ ! -e "/etc/ssh/ssh_config.d" ]; then
+    echo "Error: /etc/ssh/ssh_config.d does not exist."
+    exit 1
+fi
+
+if [ -e "$ssh_config" ]; then
+    echo "Existing OpenSSH Enabler modifications detected. Performing uninstallation."
+
+    rm $ssh_config
+    echo "Info: You can no longer access older SSH servers."
+
+    rm $sshd_config
+    restart_ssh
+
+    if [ "$confirmed_ssh_server" == "true" ]; then
+        echo "Info: Older SSH clients can no longer access your OpenSSH server."
+    else
+        echo "Info: If OpenSSH server is installed, older SSH clients can no longer access it."
+    fi
+
+    echo "Legacy SSH Enabler modifications have been removed."
+    exit 0
+fi
+
+# OpenSSH support query.
+host_key_algorithms=$(ssh -Q HostKeyAlgorithms | tr '\n' ',' | sed 's/,$//')
+pub_key_accepted_algorithms=$(ssh -Q PubkeyAcceptedAlgorithms | tr '\n' ',' | sed 's/,$//')
+ciphers=$(ssh -Q Ciphers | tr '\n' ',' | sed 's/,$//')
+kex_algorithms=$(ssh -Q KexAlgorithms | tr '\n' ',' | sed 's/,$//')
+
+echo -e "HostKeyAlgorithms=$host_key_algorithms\nPubkeyAcceptedAlgorithms=$pub_key_accepted_algorithms\nKexAlgorithms $kex_algorithms\nCiphers $ciphers" > $ssh_config
+echo "Info: You can now access older SSH servers."
+
+# A future OpenSSH server installation will pick this up.
+mkdir -p /etc/ssh/sshd_config.d
+
+echo -e "HostKeyAlgorithms=$host_key_algorithms\nPubkeyAcceptedAlgorithms=$pub_key_accepted_algorithms\nKexAlgorithms $kex_algorithms\nCiphers $ciphers" > $sshd_config
+restart_ssh
+
+if [ "$confirmed_ssh_server" == "true" ]; then
+    echo "Info: Older SSH clients can now access your OpenSSH server."
+else
+    echo "Info: If OpenSSH server is installed, older SSH clients can now access it."
+fi
