@@ -1,19 +1,29 @@
 #!/bin/bash
 
 # Legacy SSH Enabler build script
-version="v1.0"
+version="1.0.1"
 program="lsshe"
-release_name="legacy-ssh-enabler-$version"
+release_name="legacy-ssh-enabler-v$version"
 release_files="$program *.md images"
 
 cd "$(dirname "$0")"
 
-version=v$version
-rm -rf "$release_name" "$release_name".zip "$release_name".deb *.rpm
+rm -rf "$release_name" *.zip *.deb *.rpm
 
 if [ "$1" == "clean" ]; then
     exit 0
 fi
+
+if sed --version >/dev/null 2>&1; then
+    echo "Info: using GNU sed"
+    sed_args="-i"
+else
+    echo "Info: using BSD sed"
+    sed_args="-i '' -E"
+fi
+
+sed "$sed_args" "s|^VERSION=.*|VERSION=$version|" control
+sed "$sed_args" "s|Version:.*|Version: $version|" $program.spec
 
 mkdir -p "$release_name"/usr/bin
 mkdir -p "$release_name"/DEBIAN

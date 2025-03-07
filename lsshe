@@ -1,8 +1,11 @@
 #!/bin/bash
 
-version=1.0
+version=1.0.1
 ssh_config=/etc/ssh/ssh_config.d/legacy_ssh_enabler_ssh.conf
 sshd_config=/etc/ssh/sshd_config.d/legacy_ssh_enabler_sshd.conf
+
+# Redhat needs reboot to downgrade security policies
+reboot_required=false
 
 # This means maybe unless it is true.
 confirmed_ssh_server=false
@@ -23,7 +26,7 @@ restart_ssh() {
     fi
 }
 
-echo -e "Legacy SSH Enabler v$version\n(c) 2024, Alex Free (3-BSD)\n"
+echo -e "Legacy SSH Enabler v$version\n(C) 2024-2025, Alex Free (3-BSD)\n"
 
 if [ "$EUID" -ne 0 ]; then
     echo "Error: Legacy SSH Enabler requires root privileges to expand your OpenSSH configuration."
@@ -36,22 +39,37 @@ if [ ! -e "/etc/ssh/ssh_config.d" ]; then
 fi
 
 if [ -e "$ssh_config" ]; then
-    echo "Existing OpenSSH Enabler modifications detected. Performing uninstallation."
+    echo "Existing Legacy SSH Enabler modifications detected. Performing uninstallation."
+
+    if command -v update-crypto-policies > /dev/null; then
+        update-crypto-policies --set DEFAULT > /dev/null 2>&1
+        reboot_required=true
+    fi
 
     rm $ssh_config
-    echo "Info: You can no longer access older SSH servers."
+
+    if [ "$reboot_required" == "false" ]; then
+        echo "Info: You can no longer access older SSH servers from this system."
+    else
+        echo "Info: You can no longer access older SSH servers from this system after a reboot."
+    fi
 
     rm $sshd_config
     restart_ssh
 
-    if [ "$confirmed_ssh_server" == "true" ]; then
+    if [ "$reboot_required" == "false" ]; then
         echo "Info: Older SSH clients can no longer access your OpenSSH server."
     else
-        echo "Info: If OpenSSH server is installed, older SSH clients can no longer access it."
+        echo "Info: Older SSH clients can no longer access your OpenSSH server after you reboot your system."
     fi
 
     echo "Legacy SSH Enabler modifications have been removed."
     exit 0
+fi
+
+if command -v update-crypto-policies > /dev/null; then
+    update-crypto-policies --set LEGACY > /dev/null 2>&1
+    reboot_required=true
 fi
 
 # OpenSSH support query.
@@ -60,17 +78,26 @@ pub_key_accepted_algorithms=$(ssh -Q PubkeyAcceptedAlgorithms | tr '\n' ',' | se
 ciphers=$(ssh -Q Ciphers | tr '\n' ',' | sed 's/,$//')
 kex_algorithms=$(ssh -Q KexAlgorithms | tr '\n' ',' | sed 's/,$//')
 
-echo -e "HostKeyAlgorithms=$host_key_algorithms\nPubkeyAcceptedAlgorithms=$pub_key_accepted_algorithms\nKexAlgorithms $kex_algorithms\nCiphers $ciphers" > $ssh_config
-echo "Info: You can now access older SSH servers."
+echo -e "HostKeyAlgorithms=$host_key_algorithms\nPubkeyAcceptedAlgorithms=$pub_key_accepted_algorithms\nKexAlgorithms $kex_algorithms\nCiphers $ciphers\nRSAMinSize 768" > $ssh_config
+
+if [ "$reboot_required" == "false" ]; then
+    echo "Info: You can now access older SSH servers from this system."
+else 
+    echo "Info: You can now access older SSH servers from this system after a reboot."
+fi
 
 # A future OpenSSH server installation will pick this up.
 mkdir -p /etc/ssh/sshd_config.d
 
-echo -e "HostKeyAlgorithms=$host_key_algorithms\nPubkeyAcceptedAlgorithms=$pub_key_accepted_algorithms\nKexAlgorithms $kex_algorithms\nCiphers $ciphers" > $sshd_config
+echo -e "HostKeyAlgorithms=$host_key_algorithms\nPubkeyAcceptedAlgorithms=$pub_key_accepted_algorithms\nKexAlgorithms $kex_algorithms\nCiphers $ciphers\nRSAMinSize 768" > $sshd_config
 restart_ssh
 
-if [ "$confirmed_ssh_server" == "true" ]; then
+if [ "$confirmed_ssh_server" == "true" ] && [ "$reboot_required" == "false" ]; then
     echo "Info: Older SSH clients can now access your OpenSSH server."
-else
+elif [ "$confirmed_ssh_server" == "false" ] && [ "$reboot_required" == "false" ]; then
     echo "Info: If OpenSSH server is installed, older SSH clients can now access it."
+elif [ "$confirmed_ssh_server" == "true" ] && [ "$reboot_required" == "true" ]; then
+    echo "Info: Older SSH clients can access your OpenSSH server after you reboot your system."
+elif [ "$confirmed_ssh_server" == "false" ] && [ "$reboot_required" == "true" ]; then
+    echo "Info: If OpenSSH server is installed, older SSH clients can access it after you reboot your system."
 fi

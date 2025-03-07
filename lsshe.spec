@@ -1,7 +1,7 @@
 Name:           legacy-ssh-enabler
-Version:        1.0
+Version: 1.0.1
 Summary:        Allow your newer OpenSSH client and server to talk with older SSH clients and servers, system-wide.
-Release:        1%{?dist}
+Release:        1
 License:        3-BSD
 URL:            https://github.com/alex-free/ezre
 Packager:       Alex Free
